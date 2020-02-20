@@ -1,0 +1,21 @@
+{
+  "name": "esus-cds-server",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon index",
+    "build": "webpack --mode development"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^0.19.2",
+    "express": "^4.17.1",
+    "node-html-parser": "^1.2.5",
+    "webpack": "^4.41.6",
+    "webpack-cli": "^3.3.11",
+    "webpack-node-externals": "^1.7.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.2"
+  }
+}
