@@ -1,11 +1,13 @@
 const express = require('express');
 const axios = require('axios');
-const server = express();
+const cors = require('cors');
+const server = express().use(express.json()).use(cors());
 const { parse } = require('node-html-parser');
 const message = '..:: Servidor de Consulta ao SISREGIII ::..';
-const miniwebServerIP = 'localhost';
+const action = require('./actions');
 
 let totalSuccessRequests = 0;
+let cookieData = action.loadCookieFile();
 
 /**
  * ROOT
@@ -24,22 +26,22 @@ server.get('/get/:id/:computer?', async (req, res) => {
 
   console.log(`\n[${computer}][INFOR] Starting new query...`);
 
-  cookie_file = await axios.get(`http://${ miniwebServerIP }:8000/cookie/sisregiii.txt`)
-    .catch(error => {
-      console.log(`[${computer}][ERROR] Cookie Request: (${ error.message })`);
-      return false;
-    })
+  // cookie_file = await axios.get(`http://${ miniwebServerIP }:8000/cookie/sisregiii.txt`)
+  //   .catch(error => {
+  //     console.log(`[${computer}][ERROR] Cookie Request: (${ error.message })`);
+  //     return false;
+  //   })
   
   // If Miniweb Server is not running...
-  if (!cookie_file) {
-    return res.json({
-      error: 'ECONNREFUSED',
-      description: 'Servidor de cookie não está executando.'
-    });
-  }
+  // if (!cookie_file) {
+  //   return res.json({
+  //     error: 'ECONNREFUSED',
+  //     description: 'Servidor de cookie não está executando.'
+  //   });
+  // }
 
   // Cookie collected
-  const { data: cookieData } = cookie_file;
+  // const { data: cookieData } = cookie_file;
 
   console.log(`[${computer}][INFOR] Cookie length: ${ (!cookie_file) ? 'NO_COOKIE' : cookieData.length }`);
 
@@ -130,6 +132,23 @@ server.get('/get/:id/:computer?', async (req, res) => {
   
   res.send(jsonData);
 
+});
+
+/**
+ * Read cookie from sisregiii-cookie.txt file
+ */
+server.get('/cookie/get', (req, res) => {
+  res.send(cookieData);
+});
+
+/**
+ * Write new authenticated cookie
+ */
+server.post('/cookie/set', (req, res) => {
+  const {cookie} = req.body;
+  console.log(cookie);
+  action.saveCookieFile(cookie);
+  res.send(`Cookie: ${cookie}`);
 });
 
 server.listen(5433, () => console.log(message));
