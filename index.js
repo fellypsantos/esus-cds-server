@@ -9,6 +9,8 @@ const action = require('./actions');
 let totalSuccessRequests = 0;
 let cookieData = action.loadCookieFile();
 
+action.keepAliveCookie(axios);
+
 /**
  * ROOT
  */
@@ -21,29 +23,9 @@ server.get('/', (req, res) => res.send(message));
 server.get('/get/:id/:computer?', async (req, res) => {
 
   const { id, computer } = req.params;
-  let cookie_file;
   let sisregiii;
 
   console.log(`\n[${computer}][INFOR] Starting new query...`);
-
-  // cookie_file = await axios.get(`http://${ miniwebServerIP }:8000/cookie/sisregiii.txt`)
-  //   .catch(error => {
-  //     console.log(`[${computer}][ERROR] Cookie Request: (${ error.message })`);
-  //     return false;
-  //   })
-  
-  // If Miniweb Server is not running...
-  // if (!cookie_file) {
-  //   return res.json({
-  //     error: 'ECONNREFUSED',
-  //     description: 'Servidor de cookie não está executando.'
-  //   });
-  // }
-
-  // Cookie collected
-  // const { data: cookieData } = cookie_file;
-
-  console.log(`[${computer}][INFOR] Cookie length: ${ (!cookie_file) ? 'NO_COOKIE' : cookieData.length }`);
 
   console.log(`[${computer}][QUERY] Searcing for ${id}...`);
 
@@ -62,7 +44,7 @@ server.get('/get/:id/:computer?', async (req, res) => {
   });
 
   console.log(`[${computer}][QUERY] Analysing response...`);
-  // console.log(sisregiii);
+  console.log('sisregiii type: ', typeof(sisregiii));
 
   // Check sisregiii response
   if (sisregiii === undefined){

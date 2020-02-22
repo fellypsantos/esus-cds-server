@@ -22,7 +22,15 @@ const saveCookieFile = data => {
   }
 }
 
+const keepAliveCookie = axios => {
+  setInterval(() => {
+    console.log('[COOKIE] KeepAlive.');
+    axios.get('http://sisregiii.saude.gov.br/cgi-bin/index');
+  }, 1000 * 60 * 30);
+}
+
 module.exports = {
   loadCookieFile,
   saveCookieFile,
+  keepAliveCookie,
 }
