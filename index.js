@@ -39,6 +39,14 @@ server.get('/get/:id/:computer?', async (req, res) => {
     },
     data: `nu_cns=${id}&etapa=DETALHAR&url=%2Fcgi-bin%2Fmarcar`
   }).catch(error => {
+
+    if (error.message.search(/ETIMEDOUT/i) > -1) {
+      return res.json({
+        error: 'ETIMEDOUT',
+        description: 'O servidor demorou muito pra responder.';
+      });
+    }
+
     console.log(`[${computer}][REQUEST] SISREGIII: ${ error.message }`);
     return false;
   });
@@ -49,7 +57,10 @@ server.get('/get/:id/:computer?', async (req, res) => {
   // Check sisregiii response
   if (sisregiii === undefined){
     console.log(`[${computer}][RESPONSE] SISREGIII: undefined`);
-    return res.json({ error: 'DISCONNECTED' });
+    return res.json({
+      error: 'DISCONNECTED',
+      description: 'Disconectado do SISREG.'
+    });
   }
 
   let root = parse(sisregiii.data);
@@ -127,10 +138,16 @@ server.get('/cookie/get', (req, res) => {
  * Write new authenticated cookie
  */
 server.post('/cookie/set', (req, res) => {
-  const {cookie} = req.body;
-  console.log(cookie);
-  action.saveCookieFile(cookie);
-  res.send(`Cookie: ${cookie}`);
+  const {cookie: newCookie} = req.body;
+
+  console.log(
+    (newCookie != '') ?
+    '[SUCCESS] Connected to SISREGIII.' :
+    '[ERROR] Connection cookie is empty.'
+  );
+  
+  action.saveCookieFile(newCookie);
+  res.send(`Cookie: ${newCookie}`);
 });
 
 server.listen(5433, () => console.log(message));
