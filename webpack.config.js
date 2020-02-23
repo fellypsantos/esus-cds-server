@@ -1,4 +1,3 @@
-const nodeExternals = require('webpack-node-externals');
 const path = require('path');
 
 module.exports = {
@@ -9,5 +8,4 @@ module.exports = {
     filename: 'main.server.js'
   },
   target: 'node',
-  externals: [nodeExternals()],
 };
