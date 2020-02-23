@@ -43,7 +43,7 @@ server.get('/get/:id/:computer?', async (req, res) => {
     if (error.message.search(/ETIMEDOUT/i) > -1) {
       return res.json({
         error: 'ETIMEDOUT',
-        description: 'O servidor demorou muito pra responder.';
+        description: 'O servidor demorou muito pra responder.'
       });
     }
 
@@ -139,6 +139,8 @@ server.get('/cookie/get', (req, res) => {
  */
 server.post('/cookie/set', (req, res) => {
   const {cookie: newCookie} = req.body;
+
+  cookieData = newCookie;
 
   console.log(
     (newCookie != '') ?
