@@ -5,10 +5,10 @@ const server = express().use(express.json()).use(cors());
 const { parse } = require('node-html-parser');
 const message = '..:: Servidor de Consulta ao SISREGIII ::..';
 const action = require('./actions');
+const rainbown = require('./rainbown');
 
 let totalSuccessRequests = 0;
 let cookieData = action.loadCookieFile();
-
 action.keepAliveCookie(axios);
 
 /**

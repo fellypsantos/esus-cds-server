@@ -7,7 +7,8 @@ const loadCookieFile = () => {
   }
   catch(error) {
     if ( error.message.search(/ENOENT/i) > -1 ) {
-      console.log('[ERROR] Cookie file not found.');
+      console.log('[INFOR] Cookie file not found.');
+      console.log('[INFOR] Login to SISREGIII to create and load the cookie file.');
     }
   }
 }
