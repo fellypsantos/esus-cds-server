@@ -5,11 +5,24 @@ const server = express().use(express.json()).use(cors());
 const { parse } = require('node-html-parser');
 const message = '..:: Servidor de Consulta ao SISREGIII ::..';
 const action = require('./actions');
-const rainbown = require('./rainbown');
+const rb = require('./rainbown');
+const telegramURI = 'https://api.telegram.org/bot894685284:AAHH1YhaGuVimpzEE0CIFjR7_McjuSKBePg/sendMessage?chat_id=514228109&parse_mode=markdown&text=';
 
 let totalSuccessRequests = 0;
 let cookieData = action.loadCookieFile();
+let sisregiii = ''
+let requester = '';
+
 action.keepAliveCookie(axios);
+
+const serverLog = message => {
+  if (message === undefined) 
+    console.log('\n');
+  else
+    console.log(`[${requester}]`, message);
+}
+
+const sendMessage = content => axios.get(telegramURI + encodeURIComponent(content));
 
 /**
  * ROOT
@@ -23,11 +36,12 @@ server.get('/', (req, res) => res.send(message));
 server.get('/get/:id/:computer?', async (req, res) => {
 
   const { id, computer } = req.params;
-  let sisregiii;
 
-  console.log(`\n[${computer}][INFOR] Starting new query...`);
+  requester = (computer == undefined) ? 'ANONIMO' : computer;
 
-  console.log(`[${computer}][QUERY] Searcing for ${id}...`);
+  serverLog();
+  serverLog('[INFOR] Starting new query...');
+  serverLog(`[QUERY] Searcing for ${id}...`);
 
   // Try connect to SISREGIII using current cookie data
   sisregiii = await axios({
@@ -47,16 +61,16 @@ server.get('/get/:id/:computer?', async (req, res) => {
       });
     }
 
-    console.log(`[${computer}][REQUEST] SISREGIII: ${ error.message }`);
+    rb.print(`[${requester}] [REQUEST] SISREGIII: ${ error.message }`, rb.colors.FgRed);
     return false;
   });
 
-  console.log(`[${computer}][QUERY] Analysing response...`);
-  console.log('sisregiii type: ', typeof(sisregiii));
+  serverLog('[QUERY] Analysing response...');
+  serverLog(`[RESPONSE] ${typeof(sisregiii)}`);
 
   // Check sisregiii response
-  if (sisregiii === undefined){
-    console.log(`[${computer}][RESPONSE] SISREGIII: undefined`);
+  if (sisregiii === undefined || typeof(sisregiii) === 'boolean'){
+    serverLog('[RESPONSE] SISREGIII: Disconnected');
     return res.json({
       error: 'DISCONNECTED',
       description: 'Disconectado do SISREG.'
@@ -68,26 +82,37 @@ server.get('/get/:id/:computer?', async (req, res) => {
 
   if (user.length == 0) {
 
-    // Check CNS Error
+    // Invalid CNS
     if ( sisregiii.data.search(/CNS Invalido/i) > -1 ) {
-      console.log(`[${computer}][ERROR] Invalid CNS number.`);
+      rb.print(`[${requester}] [ERROR] Invalid CNS number.`, rb.colors.FgRed);
       return res.json({
         error: 'CNS',
         description: 'Cartão do SUS incorreto.'
       });
     }
 
+    // Cookie expired
     if ( sisregiii.data.search(/Efetue o logon novamente/i) > -1 ) {
-      console.log(`[${computer}][ERROR] SISREG cookie expired.`);
+      rb.print(`[${requester}] [ERROR] SISREG cookie expired.`, rb.colors.FgRed)
       return res.json({
         error: 'COOKIE_EXPIRED',
         description: 'Conexão com o SISREG expirou.'
       });
     }
 
+    // No user found
+    if ( sisregiii.data.search(/n&atilde;o foi encontrado na base/i) > -1) {
+      rb.print(`[${requester}] [ERROR] No user found.`, rb.colors.FgRed)
+      return res.json({
+        error: 'NO_USER',
+        description: 'Nenhum usuário encontrado na base com esse cartão.'
+      });
+    }
+
     // Non specific error, shows the content of <BODY></BODY> 
     const body = sisregiii.data.split('<BODY')[1].split('</BODY>');
     console.log(body);
+    sendMessage(`CNS: *${id}*\n\nHTML: ${body}`);
 
     // Non specific error 
     return res.json({
@@ -120,8 +145,11 @@ server.get('/get/:id/:computer?', async (req, res) => {
 
   // totalSuccessRequests++;
 
-  console.log(`[${computer}][COUNT] ${++totalSuccessRequests}`);
-  console.log(`[${computer}][USER] `, jsonData);
+  // console.log(`[${computer}][COUNT] ${++totalSuccessRequests}`);
+  // console.log(`[${computer}][USER] `, jsonData);
+
+  serverLog(`[COUNT] ${++totalSuccessRequests}`);
+  serverLog(jsonData);
   
   res.send(jsonData);
 
@@ -142,10 +170,9 @@ server.post('/cookie/set', (req, res) => {
 
   cookieData = newCookie;
 
-  console.log(
-    (newCookie != '') ?
-    '[SUCCESS] Connected to SISREGIII.' :
-    '[ERROR] Connection cookie is empty.'
+  rb.print(
+    (newCookie != '') ? '[SUCCESS] Connected to SISREGIII.' : '[ERROR] Connection cookie is empty.',
+    (newCookie != '') ? rb.colors.FgGreen : rb.colors.FgRed
   );
   
   action.saveCookieFile(newCookie);

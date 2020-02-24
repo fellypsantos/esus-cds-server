@@ -26,7 +26,7 @@ const colors = {
   BgWhite : "\x1b[47m",
 };
 
-const print = (message, color) => {
+const print = (message, color = colors.FgWhite) => {
   console.log(`${color}${message}${colors.Reset}`);
 }
 
