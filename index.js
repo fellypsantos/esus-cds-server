@@ -1,5 +1,5 @@
 const express = require('express');
-const axios = require('axios');
+const axiosLib = require('axios');
 const cors = require('cors');
 const server = express().use(express.json()).use(cors());
 const { parse } = require('node-html-parser');
@@ -12,8 +12,14 @@ let totalSuccessRequests = 0;
 let cookieData = action.loadCookieFile();
 let sisregiii = ''
 let requester = '';
+let axios = axiosLib.create({
+  baseURL: 'http://sisregiii.saude.gov.br/cgi-bin/cadweb50?url=/cgi-bin/marcar',
+  timeout: 30000,
+  method: 'POST',
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+});
 
-action.keepAliveCookie(axios);
+action.keepAliveCookie(axiosLib);
 
 const serverLog = message => {
   if (message === undefined) 
@@ -22,7 +28,18 @@ const serverLog = message => {
     console.log(`[${requester}]`, message);
 }
 
+/**
+ * Send a Telegram message with the error and html page body
+ * @param {*} content 
+ */
 const sendMessage = content => axios.get(telegramURI + encodeURIComponent(content));
+
+/**
+ * Generate a object to use as response error
+ * @param {*} error 
+ * @param {*} description 
+ */
+const createError = (error, description) => ({ error, description });
 
 /**
  * ROOT
@@ -45,21 +62,12 @@ server.get('/get/:id/:computer?', async (req, res) => {
 
   // Try connect to SISREGIII using current cookie data
   sisregiii = await axios({
-    url: 'http://sisregiii.saude.gov.br/cgi-bin/cadweb50?url=/cgi-bin/marcar',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Cookie': cookieData
-    },
+    headers: { 'Cookie': cookieData },
     data: `nu_cns=${id}&etapa=DETALHAR&url=%2Fcgi-bin%2Fmarcar`
-  }).catch(error => {
-
-    if (error.message.search(/ETIMEDOUT/i) > -1) {
-      return res.json({
-        error: 'ETIMEDOUT',
-        description: 'O servidor demorou muito pra responder.'
-      });
-    }
+  })
+  .catch(error => {
+    if (error.message.search(/ETIMEDOUT/i) > -1)
+      return res.json(createError('ETIMEDOUT', 'O SISREG demorou muito pra responder.'));
 
     rb.print(`[${requester}] [REQUEST] SISREGIII: ${ error.message }`, rb.colors.FgRed);
     return false;
@@ -71,10 +79,7 @@ server.get('/get/:id/:computer?', async (req, res) => {
   // Check sisregiii response
   if (sisregiii === undefined || typeof(sisregiii) === 'boolean'){
     serverLog('[RESPONSE] SISREGIII: Disconnected');
-    return res.json({
-      error: 'DISCONNECTED',
-      description: 'Disconectado do SISREG.'
-    });
+    return res.json(createError('CONNECTION_PROBLEMS', 'Ocorreram problemas na conexão.'));
   }
 
   let root = parse(sisregiii.data);
@@ -85,28 +90,19 @@ server.get('/get/:id/:computer?', async (req, res) => {
     // Invalid CNS
     if ( sisregiii.data.search(/CNS Invalido/i) > -1 ) {
       rb.print(`[${requester}] [ERROR] Invalid CNS number.`, rb.colors.FgRed);
-      return res.json({
-        error: 'CNS',
-        description: 'Cartão do SUS incorreto.'
-      });
+      return res.json(createError('CNS', 'Cartão do SUS incorreto.'));
     }
 
     // Cookie expired
     if ( sisregiii.data.search(/Efetue o logon novamente/i) > -1 ) {
-      rb.print(`[${requester}] [ERROR] SISREG cookie expired.`, rb.colors.FgRed)
-      return res.json({
-        error: 'COOKIE_EXPIRED',
-        description: 'Conexão com o SISREG expirou.'
-      });
+      rb.print(`[${requester}] [ERROR] SISREG cookie expired.`, rb.colors.FgRed);
+      return res.json(createError('COOKIE_EXPIRED', 'Conexão com o SISREG expirou.'));
     }
 
     // No user found
     if ( sisregiii.data.search(/n&atilde;o foi encontrado na base/i) > -1) {
-      rb.print(`[${requester}] [ERROR] No user found.`, rb.colors.FgRed)
-      return res.json({
-        error: 'NO_USER',
-        description: 'Nenhum usuário encontrado na base com esse cartão.'
-      });
+      rb.print(`[${requester}] [ERROR] No user found.`, rb.colors.FgRed);
+      return res.json(createError('NO_USER', 'Nenhum usuário encontrado na base com esse cartão.'));
     }
 
     // Non specific error, shows the content of <BODY></BODY> 
@@ -114,11 +110,8 @@ server.get('/get/:id/:computer?', async (req, res) => {
     console.log(body);
     sendMessage(`CNS: *${id}*\n\nHTML: ${body}`);
 
-    // Non specific error 
-    return res.json({
-      error: 'UNDEFINED',
-      description: 'Ocorreu um erro desconhecido.'
-    });
+    // Non specific error
+    return res.json(createError('UNDEFINED', 'Ocorreu um erro desconhecido.'));
   }
 
   let indexInfo = {
@@ -143,16 +136,65 @@ server.get('/get/:id/:computer?', async (req, res) => {
   jsonData.nascimento = jsonData.nascimento.split(' ')[0];
   jsonData.cor = ( jsonData.cor === null ) ? 'PARDA' : jsonData.cor;
 
-  // totalSuccessRequests++;
-
-  // console.log(`[${computer}][COUNT] ${++totalSuccessRequests}`);
-  // console.log(`[${computer}][USER] `, jsonData);
-
   serverLog(`[COUNT] ${++totalSuccessRequests}`);
   serverLog(jsonData);
   
   res.send(jsonData);
 
+});
+
+server.get('/search/:name/:birthday?', async (req, res) => {
+  const { name, birthday } = req.params;
+
+  let sisregiiiByName;
+  let formattedBirthday = (birthday !== undefined) ? birthday.replace(/-/g, '/') : '';
+
+  console.log('Buscando por nome...');
+  console.log(name.toUpperCase(), formattedBirthday);
+
+  // try to find some user by name
+  sisregiiiByName = await axios({
+    headers: { 'Cookie': cookieData },
+    data: `nome_paciente=${name.toUpperCase()}&dt_nascimento=${formattedBirthday}&etapa=LISTAR&url=/cgi-bin/marcar`
+  })
+  .catch(error => {
+    rb.print(`[${requester}] [REQUEST] SISREGIIIBYNAME: ${ error.message }`, rb.colors.FgRed);
+    return false;
+  });
+
+  // Check response
+  if (sisregiiiByName === undefined || typeof(sisregiiiByName) === 'boolean'){
+    serverLog('[RESPONSE] SISREGIII: Disconnected');
+    return res.json(createError('CONNECTION_PROBLEMS', 'Ocorreram problemas na conexão.'));
+  }
+
+  // Parse response to access page elements
+  let root = parse(sisregiiiByName.data.toLowerCase());
+  let users = root.querySelectorAll('table td');
+
+  console.log(root.toString());
+  console.log('\n\n* * * * * * * *\n\n');
+  console.log(users);
+  
+  /**
+   * TODO
+   * Convert search result to JSON
+   * Send as respose
+   */
+  users.forEach(user => {
+    if (user.text.length == 3) return;
+
+    console.log('user: ', user.text.length);
+    console.log('user: ', user.text.trim(), '\n');
+  });
+
+  return res.send('');
+
+  let totalFound = sisregiiiByName.data
+    .split('Usu&#225;rios encontrados (')[1]
+    .split(')')[0];
+
+  console.log('Users found: ', totalFound);
 });
 
 /**
