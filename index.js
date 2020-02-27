@@ -143,19 +143,18 @@ server.get('/get/:id/:computer?', async (req, res) => {
 
 });
 
-server.get('/search/:name/:birthday?', async (req, res) => {
-  const { name, birthday } = req.params;
+server.post('/search/', async (req, res) => {
 
   let sisregiiiByName;
-  let formattedBirthday = (birthday !== undefined) ? birthday.replace(/-/g, '/') : '';
+  const { name, age, mother } = req.body;
 
-  console.log('Buscando por nome...');
-  console.log(name.toUpperCase(), formattedBirthday);
+  console.log('\n\n');
+  console.log(`[SEARCHING] ${name}, Age: ${age}`);
 
   // try to find some user by name
   sisregiiiByName = await axios({
     headers: { 'Cookie': cookieData },
-    data: `nome_paciente=${name.toUpperCase()}&dt_nascimento=${formattedBirthday}&etapa=LISTAR&url=/cgi-bin/marcar`
+    data: `nome_paciente=${name.toUpperCase()}&dt_nascimento=${age}&nome_mae=${mother.toUpperCase()}&etapa=LISTAR&url=/cgi-bin/marcar`
   })
   .catch(error => {
     rb.print(`[${requester}] [REQUEST] SISREGIIIBYNAME: ${ error.message }`, rb.colors.FgRed);
@@ -171,30 +170,32 @@ server.get('/search/:name/:birthday?', async (req, res) => {
   // Parse response to access page elements
   let root = parse(sisregiiiByName.data.toLowerCase());
   let users = root.querySelectorAll('table td');
+  let jsonUsers = [];
 
-  console.log(root.toString());
-  console.log('\n\n* * * * * * * *\n\n');
-  console.log(users);
-  
-  /**
-   * TODO
-   * Convert search result to JSON
-   * Send as respose
-   */
   users.forEach(user => {
-    if (user.text.length == 3) return;
+    // ignore specified lines
+    if (user.text.indexOf('encontrados') > -1 || user.text.length == 3) return;
 
-    console.log('user: ', user.text.length);
-    console.log('user: ', user.text.trim(), '\n');
+    // remove html tags from result
+    let userData = user.innerHTML
+      .match(/<b>.*<\/b>/g)
+      .map(info => info.replace(/<b>|<\/b>/g, ''));    
+
+    // select useful informations
+    userData = {
+      nome: userData[0].toUpperCase(),
+      mae: userData[1].toUpperCase(),
+      cns: userData[2],
+      municipio: userData[3].toUpperCase(),
+      nascimento: userData[5],
+    };
+
+    // add to list
+    jsonUsers.push( userData );
   });
 
-  return res.send('');
-
-  let totalFound = sisregiiiByName.data
-    .split('Usu&#225;rios encontrados (')[1]
-    .split(')')[0];
-
-  console.log('Users found: ', totalFound);
+  console.log(`[SEARCH] Found ${jsonUsers.length} users`);
+  return res.json( jsonUsers );
 });
 
 /**
