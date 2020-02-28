@@ -146,15 +146,14 @@ server.get('/get/:id/:computer?', async (req, res) => {
 server.post('/search/', async (req, res) => {
 
   let sisregiiiByName;
-  const { name, age, mother } = req.body;
+  const { name, birthday, mother } = req.body;
 
-  console.log('\n\n');
-  console.log(`[SEARCHING] ${name}, Age: ${age}`);
+  console.log(`[SEARCHING] ${name}`, birthday, mother);
 
   // try to find some user by name
   sisregiiiByName = await axios({
     headers: { 'Cookie': cookieData },
-    data: `nome_paciente=${name.toUpperCase()}&dt_nascimento=${age}&nome_mae=${mother.toUpperCase()}&etapa=LISTAR&url=/cgi-bin/marcar`
+    data: `nome_paciente=${name.toUpperCase()}&dt_nascimento=${birthday}&nome_mae=${mother.toUpperCase()}&etapa=LISTAR&url=/cgi-bin/marcar`
   })
   .catch(error => {
     rb.print(`[${requester}] [REQUEST] SISREGIIIBYNAME: ${ error.message }`, rb.colors.FgRed);
@@ -165,6 +164,14 @@ server.post('/search/', async (req, res) => {
   if (sisregiiiByName === undefined || typeof(sisregiiiByName) === 'boolean'){
     serverLog('[RESPONSE] SISREGIII: Disconnected');
     return res.json(createError('CONNECTION_PROBLEMS', 'Ocorreram problemas na conexão.'));
+  }
+
+  const response = sisregiiiByName.data.toLowerCase();
+
+  // Check expired session alert
+  if ( response.match(/sess&atilde;o expirou|logon novamente/g)) {
+    rb.print('Conexão expirada com SISREG, login necessário.', rb.colors.FgRed);
+    return res.send(createError('COOKIE_EXPIRED', 'A conexão com SISREG expirou, login necessário.'));
   }
 
   // Parse response to access page elements
@@ -194,7 +201,7 @@ server.post('/search/', async (req, res) => {
     jsonUsers.push( userData );
   });
 
-  console.log(`[SEARCH] Found ${jsonUsers.length} users`);
+  console.log(`[SEARCHING] Found ${jsonUsers.length} users`);
   return res.json( jsonUsers );
 });
 
