@@ -60,86 +60,93 @@ server.get('/get/:id/:computer?', async (req, res) => {
   serverLog('[INFOR] Starting new query...');
   serverLog(`[QUERY] Searcing for ${id}...`);
 
-  // Try connect to SISREGIII using current cookie data
-  sisregiii = await axios({
-    headers: { 'Cookie': cookieData },
-    data: `nu_cns=${id}&etapa=DETALHAR&url=%2Fcgi-bin%2Fmarcar`
-  })
-  .catch(error => {
-    if (error.message.search(/ETIMEDOUT/i) > -1)
-      return res.json(createError('ETIMEDOUT', 'O SISREG demorou muito pra responder.'));
+  try {
+    // Try connect to SISREGIII using current cookie data
+    sisregiii = await axios({
+      headers: { 'Cookie': cookieData },
+      data: `nu_cns=${id}&etapa=DETALHAR&url=%2Fcgi-bin%2Fmarcar`
+    })
+    .catch(error => {
+      if (error.message.search(/ETIMEDOUT/i) > -1)
+        return res.json(createError('ETIMEDOUT', 'O SISREG demorou muito pra responder.'));
 
-    rb.print(`[${requester}] [REQUEST] SISREGIII: ${ error.message }`, rb.colors.FgRed);
-    return false;
-  });
+      rb.print(`[${requester}] [REQUEST] SISREGIII: ${ error.message }`, rb.colors.FgRed);
+      return false;
+    });
 
-  serverLog('[QUERY] Analysing response...');
-  serverLog(`[RESPONSE] ${typeof(sisregiii)}`);
+    serverLog('[QUERY] Analysing response...');
+    serverLog(`[RESPONSE] ${typeof(sisregiii)}`);
 
-  // Check sisregiii response
-  if (sisregiii === undefined || typeof(sisregiii) === 'boolean'){
-    serverLog('[RESPONSE] SISREGIII: Disconnected');
-    return res.json(createError('CONNECTION_PROBLEMS', 'Ocorreram problemas na conexão.'));
+    // Check sisregiii response
+    if (sisregiii === undefined || typeof(sisregiii) === 'boolean'){
+      serverLog('[RESPONSE] SISREGIII: Disconnected');
+      return res.json(createError('CONNECTION_PROBLEMS', 'Ocorreram problemas na conexão.'));
+    }
+
+    let root = parse(sisregiii.data);
+    let user = root.querySelectorAll('td');
+
+    if (user.length == 0) {
+
+      // Invalid CNS
+      if ( sisregiii.data.search(/CNS Invalido/i) > -1 ) {
+        rb.print(`[${requester}] [ERROR] Invalid CNS number.`, rb.colors.FgRed);
+        return res.json(createError('CNS', 'Cartão do SUS incorreto.'));
+      }
+
+      // Cookie expired
+      if ( sisregiii.data.search(/Efetue o logon novamente/i) > -1 ) {
+        rb.print(`[${requester}] [ERROR] SISREG cookie expired.`, rb.colors.FgRed);
+        return res.json(createError('COOKIE_EXPIRED', 'Conexão com o SISREG expirou.'));
+      }
+
+      // No user found
+      if ( sisregiii.data.search(/n&atilde;o foi encontrado na base/i) > -1) {
+        rb.print(`[${requester}] [ERROR] No user found.`, rb.colors.FgRed);
+        return res.json(createError('NO_USER', 'Nenhum usuário encontrado na base com esse cartão.'));
+      }
+
+      // Non specific error, shows the content of <BODY></BODY> 
+      const body = sisregiii.data.split('<BODY')[1].split('</BODY>');
+      console.log(body);
+      sendMessage(`CNS: *${id}*\n\nHTML: ${body}`);
+
+      // Non specific error
+      return res.json(createError('UNDEFINED', 'Ocorreu um erro desconhecido.'));
+    }
+
+    let indexInfo = {
+      cns: 2,
+      nome: 5,
+      mae: 9,
+      pai: 10,
+      sexo: 13,
+      cor: 14,
+      nascimento: 17,
+      nacionalidade: 21,
+      municipio: 22,
+    }
+
+    let jsonData = {};
+
+    for(item in indexInfo) {
+      let index = indexInfo[item];
+      let data = user[index].text.trim();
+      jsonData[item] = ( data.search(/sem info|--/i) >= 0 ) ? null : data;
+    }
+
+    jsonData.nascimento = jsonData.nascimento.split(' ')[0];
+    jsonData.cor = ( jsonData.cor === null ) ? 'PARDA' : jsonData.cor;
+
+    serverLog(`[COUNT] ${++totalSuccessRequests}`);
+    serverLog(jsonData);
+    
+    res.send(jsonData);
   }
-
-  let root = parse(sisregiii.data);
-  let user = root.querySelectorAll('td');
-
-  if (user.length == 0) {
-
-    // Invalid CNS
-    if ( sisregiii.data.search(/CNS Invalido/i) > -1 ) {
-      rb.print(`[${requester}] [ERROR] Invalid CNS number.`, rb.colors.FgRed);
-      return res.json(createError('CNS', 'Cartão do SUS incorreto.'));
-    }
-
-    // Cookie expired
-    if ( sisregiii.data.search(/Efetue o logon novamente/i) > -1 ) {
-      rb.print(`[${requester}] [ERROR] SISREG cookie expired.`, rb.colors.FgRed);
-      return res.json(createError('COOKIE_EXPIRED', 'Conexão com o SISREG expirou.'));
-    }
-
-    // No user found
-    if ( sisregiii.data.search(/n&atilde;o foi encontrado na base/i) > -1) {
-      rb.print(`[${requester}] [ERROR] No user found.`, rb.colors.FgRed);
-      return res.json(createError('NO_USER', 'Nenhum usuário encontrado na base com esse cartão.'));
-    }
-
-    // Non specific error, shows the content of <BODY></BODY> 
-    const body = sisregiii.data.split('<BODY')[1].split('</BODY>');
-    console.log(body);
-    sendMessage(`CNS: *${id}*\n\nHTML: ${body}`);
-
-    // Non specific error
+  catch(error) {
+    console.log('[ERROR] Failed to get user info using CNS.')
     return res.json(createError('UNDEFINED', 'Ocorreu um erro desconhecido.'));
   }
-
-  let indexInfo = {
-    nome: 5,
-    mae: 9,
-    pai: 10,
-    sexo: 13,
-    cor: 14,
-    nascimento: 17,
-    nacionalidade: 21,
-    municipio: 22,
-  }
-
-  let jsonData = {};
-
-  for(item in indexInfo) {
-    let index = indexInfo[item];
-    let data = user[index].text.trim();
-    jsonData[item] = ( data.search(/sem info|--/i) >= 0 ) ? null : data;
-  }
-
-  jsonData.nascimento = jsonData.nascimento.split(' ')[0];
-  jsonData.cor = ( jsonData.cor === null ) ? 'PARDA' : jsonData.cor;
-
-  serverLog(`[COUNT] ${++totalSuccessRequests}`);
-  serverLog(jsonData);
-  
-  res.send(jsonData);
 
 });
 
@@ -183,25 +190,49 @@ server.post('/search/', async (req, res) => {
     // ignore specified lines
     if (user.text.indexOf('encontrados') > -1 || user.text.length == 3) return;
 
-    // remove html tags from result
-    let userData = user.innerHTML
-      .match(/<b>.*<\/b>/g)
-      .map(info => info.replace(/<b>|<\/b>/g, ''));    
+    let userData = {}
 
-    // select useful informations
-    userData = {
-      nome: userData[0].toUpperCase(),
-      mae: userData[1].toUpperCase(),
-      cns: userData[2],
-      municipio: userData[3].toUpperCase(),
-      nascimento: userData[5],
-    };
+    user.innerHTML
+      .replace(/\n|\t|●/g, '')
+      .split('</b>')
+      .map(info => {
+        info = info.trim();
+        key = info.match(/usuário|mãe|cns|nascimento|naturalidade/);
+
+        if (key == null) return;
+
+        // remove trash strings
+        key.input = key.input.replace(/.*: <b>/, '').toUpperCase();
+
+        switch(key[0]) {
+          case 'usuário':
+            userData['nome'] = key.input;
+            break;
+
+          case 'mãe':
+            userData['mae'] = key.input;
+            break;
+
+          case 'cns':
+            userData['cns'] = key.input;
+            break;
+
+          case 'nascimento':
+            userData['nascimento'] = key.input;
+            break;
+
+          case 'naturalidade':
+            userData['municipio'] = key.input;
+            break;          
+        }
+      });
 
     // add to list
     jsonUsers.push( userData );
   });
 
   console.log(`[SEARCHING] Found ${jsonUsers.length} users`);
+  // console.log(jsonUsers);
   return res.json( jsonUsers );
 });
 
