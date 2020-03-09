@@ -135,6 +135,7 @@ server.get('/get/:id/:computer?', async (req, res) => {
       jsonData[item] = ( data.search(/sem info|--/i) >= 0 ) ? null : data;
     }
 
+    jsonData.cns = jsonData.cns.replace('\n*', '');
     jsonData.nascimento = jsonData.nascimento.split(' ')[0];
     jsonData.cor = ( jsonData.cor === null ) ? 'PARDA' : jsonData.cor;
 
@@ -202,7 +203,7 @@ server.post('/search/', async (req, res) => {
         if (key == null) return;
 
         // remove trash strings
-        key.input = key.input.replace(/.*: <b>/, '').toUpperCase();
+        key.input = key.input.replace(/.*: <b>|\n/, '').toUpperCase();
 
         switch(key[0]) {
           case 'usuário':
