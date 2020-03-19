@@ -1,5 +1,7 @@
+const fs = require('fs');
 const express = require('express');
 const axiosLib = require('axios');
+const moment = require('moment');
 const cors = require('cors');
 const server = express().use(express.json()).use(cors());
 const { parse } = require('node-html-parser');
@@ -19,6 +21,7 @@ let axios = axiosLib.create({
   headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
 });
 
+moment.locale('pt');
 action.keepAliveCookie(axiosLib);
 
 const serverLog = message => {
@@ -40,6 +43,11 @@ const sendMessage = content => axios.get(telegramURI + encodeURIComponent(conten
  * @param {*} description 
  */
 const createError = (error, description) => ({ error, description });
+
+server.use((req, res, next) => {
+  console.log(`[${ moment().format('LTS') }]`);
+  next();
+});
 
 /**
  * ROOT
@@ -235,6 +243,19 @@ server.post('/search/', async (req, res) => {
   console.log(`[SEARCHING] Found ${jsonUsers.length} users`);
   // console.log(jsonUsers);
   return res.json( jsonUsers );
+});
+
+server.post('/log', (req, res) => {
+  const { cad_type, computer } = req.body;
+  const hour = moment().format('LTS');
+  const date = moment().format('L');
+  const filename = date.replace(/\//g, '-');
+  const logMessage = `${date} ${hour} : [${computer}] - Cadastro Individual.\n`;
+
+  console.log('Registrando salvamento de cadastro.');
+
+  fs.appendFileSync(`${filename}.txt`, logMessage);
+  res.send().status(200);
 });
 
 /**
