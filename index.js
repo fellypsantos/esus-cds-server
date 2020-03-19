@@ -45,6 +45,7 @@ const sendMessage = content => axios.get(telegramURI + encodeURIComponent(conten
 const createError = (error, description) => ({ error, description });
 
 server.use((req, res, next) => {
+  serverLog();
   console.log(`[${ moment().format('LTS') }]`);
   next();
 });
@@ -64,7 +65,6 @@ server.get('/get/:id/:computer?', async (req, res) => {
 
   requester = (computer == undefined) ? 'ANONIMO' : computer;
 
-  serverLog();
   serverLog('[INFOR] Starting new query...');
   serverLog(`[QUERY] Searcing for ${id}...`);
 
